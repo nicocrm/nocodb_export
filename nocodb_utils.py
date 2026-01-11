@@ -9,21 +9,12 @@ Shared functions for NocoDB export/import scripts including:
 - Configuration management
 """
 
+import dotenv
 import os
 import sys
 import requests
 from typing import Dict, Optional
 
-
-def check_requests_library():
-    """Check if requests library is installed"""
-    try:
-        import requests
-    except ImportError:
-        print('❌ Error: requests library not found')
-        print('\nPlease install it with:')
-        print('  pip install requests')
-        sys.exit(1)
 
 
 def make_request(url: str, method: str = 'GET', token: str = '',
@@ -34,6 +25,7 @@ def make_request(url: str, method: str = 'GET', token: str = '',
         'Content-Type': 'application/json'
     }
 
+    print(f"{url=} {method=} {token=} {json_data=} {params=}")
     try:
         if method == 'GET':
             response = requests.get(url, headers=headers, params=params)
@@ -108,6 +100,7 @@ def get_config_with_auth(required_vars: list, optional_vars: dict = None) -> Dic
     Returns:
         Configuration dictionary
     """
+    dotenv.load_dotenv()
     optional_vars = optional_vars or {}
 
     # Base configuration

@@ -16,7 +16,7 @@ import json
 from datetime import datetime
 from typing import Dict, List
 
-from nocodb_utils import make_request, get_config_with_auth, check_requests_library
+from nocodb_utils import make_request, get_config_with_auth
 
 
 def export_base_metadata(base_id: str, token: str, url: str) -> Dict:
@@ -203,5 +203,4 @@ def main():
 
 
 if __name__ == '__main__':
-    check_requests_library()
     main()

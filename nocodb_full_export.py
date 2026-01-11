@@ -16,36 +16,36 @@ import json
 from datetime import datetime
 from typing import Dict, List
 
-from nocodb_utils import make_request, get_config_with_auth
+from nocodb_utils import ApiClient, get_config_with_auth
 
 
-def export_base_metadata(base_id: str, token: str, url: str) -> Dict:
+def export_base_metadata(base_id: str, api_client: ApiClient) -> Dict:
     """Export base metadata"""
     print(f'\n📋 Exporting base metadata...')
-    base_url = f"{url}/api/v2/meta/bases/{base_id}"
-    metadata = make_request(base_url, token=token)
+    base_path = f"/api/v2/meta/bases/{base_id}"
+    metadata = api_client.make_request(method='GET', path=base_path)
     print(f'   ✓ Base: {metadata.get("title", "Unknown")}')
     return metadata
 
 
-def export_tables(base_id: str, token: str, url: str) -> List[Dict]:
+def export_tables(base_id: str, api_client: ApiClient) -> List[Dict]:
     """Export all tables in the base"""
     print(f'\n📊 Exporting tables...')
-    tables_url = f"{url}/api/v2/meta/bases/{base_id}/tables"
-    tables_response = make_request(tables_url, token=token)
+    tables_path = f"/api/v2/meta/bases/{base_id}/tables"
+    tables_response = api_client.make_request(method='GET', path=tables_path)
     tables = tables_response.get('list', [])
     print(f'   ✓ Found {len(tables)} tables')
     return tables
 
 
-def export_table_schema(table_id: str, token: str, url: str) -> Dict:
+def export_table_schema(table_id: str, api_client: ApiClient) -> Dict:
     """Export table schema (columns, relationships, etc.)"""
-    schema_url = f"{url}/api/v2/meta/tables/{table_id}"
-    schema = make_request(schema_url, token=token)
+    schema_path = f"/api/v2/meta/tables/{table_id}"
+    schema = api_client.make_request(method='GET', path=schema_path)
     return schema
 
 
-def export_table_data(base_id: str, table_id: str, table_name: str, token: str, url: str) -> List[Dict]:
+def export_table_data(base_id: str, table_id: str, table_name: str, api_client: ApiClient) -> List[Dict]:
     """Export all data from a table"""
     all_data = []
     offset = 0
@@ -53,14 +53,14 @@ def export_table_data(base_id: str, table_id: str, table_name: str, token: str, 
 
     while True:
         # Use the data API endpoint
-        data_url = f"{url}/api/v2/tables/{table_id}/records"
+        data_path = f"/api/v2/tables/{table_id}/records"
         params = {
             'limit': limit,
             'offset': offset
         }
 
         try:
-            response = make_request(data_url, token=token, params=params)
+            response = api_client.make_request(method='GET', path=data_path, params=params)
             records = response.get('list', [])
 
             if not records:
@@ -82,18 +82,18 @@ def export_table_data(base_id: str, table_id: str, table_name: str, token: str, 
     return all_data
 
 
-def export_table_views(table_id: str, token: str, url: str) -> List[Dict]:
+def export_table_views(table_id: str, api_client: ApiClient) -> List[Dict]:
     """Export views for a table"""
     try:
-        views_url = f"{url}/api/v2/meta/tables/{table_id}/views"
-        response = make_request(views_url, token=token)
+        views_path = f"/api/v2/meta/tables/{table_id}/views"
+        response = api_client.make_request(method='GET', path=views_path)
         return response.get('list', [])
     except Exception as e:
         print(f'      Warning: Could not fetch views: {str(e)}')
         return []
 
 
-def export_full_base(base_id: str, token: str, url: str, include_data: bool = True) -> Dict:
+def export_full_base(base_id: str, api_client: ApiClient, include_data: bool = True) -> Dict:
     """Export complete base with all tables, schemas, and data"""
     print('═══════════════════════════════════════════════')
     print('  NocoDB Full Base Export')
@@ -107,10 +107,10 @@ def export_full_base(base_id: str, token: str, url: str, include_data: bool = Tr
     }
 
     # Step 1: Export base metadata
-    export_data['base'] = export_base_metadata(base_id, token, url)
+    export_data['base'] = export_base_metadata(base_id, api_client)
 
     # Step 2: Export all tables
-    tables = export_tables(base_id, token, url)
+    tables = export_tables(base_id, api_client)
 
     # Step 3: For each table, export schema and data
     print(f'\n📦 Exporting table details...')
@@ -122,17 +122,17 @@ def export_full_base(base_id: str, token: str, url: str, include_data: bool = Tr
 
         # Export schema
         print(f'      - Fetching schema...')
-        schema = export_table_schema(table_id, token, url)
+        schema = export_table_schema(table_id, api_client)
 
         # Export views
         print(f'      - Fetching views...')
-        views = export_table_views(table_id, token, url)
+        views = export_table_views(table_id, api_client)
 
         # Export data
         data = []
         if include_data:
             print(f'      - Fetching data...')
-            data = export_table_data(base_id, table_id, table_title, token, url)
+            data = export_table_data(base_id, table_id, table_title, api_client)
             print(f'      ✓ Exported {len(data)} records')
         else:
             print(f'      - Skipping data (schema only)')
@@ -164,11 +164,17 @@ def main():
     config['include_data'] = config.get('include_data', 'true').lower() == 'true'
 
     try:
+        # Create ApiClient instance
+        api_client = ApiClient(
+            token=config['token'],
+            token_type=config['token_type'],
+            url=config['url']
+        )
+
         # Export the base
         export_data = export_full_base(
             config['base_id'],
-            config['token'],
-            config['url'],
+            api_client,
             config['include_data']
         )
 

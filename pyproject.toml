@@ -1,7 +1,7 @@
 [project]
 name = "nocodb-export"
 version = "0.1.0"
-description = "Add your description here"
+description = "Utility for importing and exporting data and schema from NocoDB"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

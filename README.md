@@ -15,7 +15,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 NOCODB_EMAIL="your@email.com" \
 NOCODB_PASSWORD="yourpassword" \
 BASE_ID="p2b1mor87640vjw" \
-uv run --with requests nocodb_full_export.py
+uv run nocodb_full_export.py
 ```
 
 ### Import a Base
@@ -23,7 +23,7 @@ uv run --with requests nocodb_full_export.py
 NOCODB_EMAIL="your@email.com" \
 NOCODB_PASSWORD="yourpassword" \
 IMPORT_FILE="nocodb_export_BaseName_TIMESTAMP.json" \
-uv run --with requests nocodb_full_import.py
+uv run nocodb_full_import.py
 ```
 
 ## Authentication
@@ -109,7 +109,7 @@ NOCODB_PASSWORD=yourpassword
 BASE_ID=p123abc
 EOF
 
-export $(cat .env | xargs) && uv run --with requests nocodb_full_export.py
+uv run nocodb_full_export.py
 ```
 
 **Batch export:**

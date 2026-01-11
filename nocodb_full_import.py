@@ -16,7 +16,7 @@ import json
 import time
 from typing import Dict, List
 
-from nocodb_utils import make_request, get_config_with_auth, check_requests_library
+from nocodb_utils import make_request, get_config_with_auth
 
 
 def create_base(title: str, description: str, token: str, url: str, workspace_id: str = None) -> Dict:
@@ -254,5 +254,4 @@ def main():
 
 
 if __name__ == '__main__':
-    check_requests_library()
     main()

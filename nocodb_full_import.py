@@ -16,10 +16,10 @@ import json
 import time
 from typing import Dict, List
 
-from nocodb_utils import make_request, get_config_with_auth
+from nocodb_utils import ApiClient, get_config_with_auth
 
 
-def create_base(title: str, description: str, token: str, url: str, workspace_id: str = None) -> Dict:
+def create_base(title: str, description: str, api_client: ApiClient, workspace_id: str = None) -> Dict:
     """Create a new base"""
     print(f'\n📋 Creating new base: {title}')
 
@@ -31,14 +31,14 @@ def create_base(title: str, description: str, token: str, url: str, workspace_id
     if workspace_id:
         base_data['fk_workspace_id'] = workspace_id
 
-    create_url = f"{url}/api/v2/meta/bases"
-    new_base = make_request(create_url, method='POST', token=token, json_data=base_data)
+    create_path = "/api/v2/meta/bases"
+    new_base = api_client.make_request(method='POST', path=create_path, json_data=base_data)
 
     print(f'   ✓ Base created with ID: {new_base["id"]}')
     return new_base
 
 
-def create_table(base_id: str, table_schema: Dict, token: str, url: str) -> Dict:
+def create_table(base_id: str, table_schema: Dict, api_client: ApiClient) -> Dict:
     """Create a table with its schema"""
     table_title = table_schema.get('title', 'Untitled')
 
@@ -92,13 +92,13 @@ def create_table(base_id: str, table_schema: Dict, token: str, url: str) -> Dict
         'columns': columns
     }
 
-    create_url = f"{url}/api/v2/meta/bases/{base_id}/tables"
-    new_table = make_request(create_url, method='POST', token=token, json_data=table_data)
+    create_path = f"/api/v2/meta/bases/{base_id}/tables"
+    new_table = api_client.make_request(method='POST', path=create_path, json_data=table_data)
 
     return new_table
 
 
-def import_table_data(table_id: str, data: List[Dict], token: str, url: str) -> int:
+def import_table_data(table_id: str, data: List[Dict], api_client: ApiClient) -> int:
     """Import data into a table"""
     if not data:
         return 0
@@ -121,11 +121,11 @@ def import_table_data(table_id: str, data: List[Dict], token: str, url: str) -> 
             cleaned_batch.append(cleaned_record)
 
         try:
-            data_url = f"{url}/api/v2/tables/{table_id}/records"
+            data_path = f"/api/v2/tables/{table_id}/records"
             # Try to bulk insert
             for record in cleaned_batch:
                 try:
-                    make_request(data_url, method='POST', token=token, json_data=record)
+                    api_client.make_request(method='POST', path=data_path, json_data=record)
                     imported_count += 1
                     print(f'      Imported {imported_count}/{len(data)} records...', end='\r')
                 except Exception as e:
@@ -139,7 +139,7 @@ def import_table_data(table_id: str, data: List[Dict], token: str, url: str) -> 
     return imported_count
 
 
-def import_full_base(import_file: str, token: str, url: str,
+def import_full_base(import_file: str, api_client: ApiClient,
                      new_base_title: str = None, workspace_id: str = None) -> Dict:
     """Import complete base from export file"""
     print('═══════════════════════════════════════════════')
@@ -162,8 +162,7 @@ def import_full_base(import_file: str, token: str, url: str,
     new_base = create_base(
         base_title,
         export_data['base'].get('description', ''),
-        token,
-        url,
+        api_client,
         workspace_id
     )
 
@@ -182,7 +181,7 @@ def import_full_base(import_file: str, token: str, url: str,
         print(f'      - Creating table structure...')
 
         try:
-            new_table = create_table(new_base['id'], table_schema, token, url)
+            new_table = create_table(new_base['id'], table_schema, api_client)
             old_table_id = table_export['metadata']['id']
             table_mapping[old_table_id] = new_table['id']
 
@@ -192,7 +191,7 @@ def import_full_base(import_file: str, token: str, url: str,
             data = table_export.get('data', [])
             if data:
                 print(f'      - Importing {len(data)} records...')
-                imported = import_table_data(new_table['id'], data, token, url)
+                imported = import_table_data(new_table['id'], data, api_client)
                 print(f'      ✓ Imported {imported} records')
             else:
                 print(f'      - No data to import')
@@ -225,11 +224,17 @@ def main():
         sys.exit(1)
 
     try:
+        # Create ApiClient instance
+        api_client = ApiClient(
+            token=config['token'],
+            token_type=config['token_type'],
+            url=config['url']
+        )
+
         # Import the base
         result = import_full_base(
             config['import_file'],
-            config['token'],
-            config['url'],
+            api_client,
             config['new_base_title'],
             config['workspace_id']
         )

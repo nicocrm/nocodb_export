@@ -45,7 +45,7 @@ NOCODB_TOKEN="eyJhbGc..."
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `NOCODB_EMAIL` + `NOCODB_PASSWORD` | Yes* | - | Email/password auth |
-| `NOCODB_TOKEN` | Yes* | - | Token auth (alternative) |
+| `NOCODB_TOKEN` | Yes* | - | API Token auth (alternative) |
 | `BASE_ID` | Yes | - | Base ID (from URL) |
 | `NOCODB_URL` | No | `http://localhost:8500` | NocoDB instance URL |
 | `INCLUDE_DATA` | No | `true` | Include table data |
@@ -58,7 +58,7 @@ NOCODB_TOKEN="eyJhbGc..."
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `NOCODB_EMAIL` + `NOCODB_PASSWORD` | Yes* | - | Email/password auth |
-| `NOCODB_TOKEN` | Yes* | - | Token auth (alternative) |
+| `NOCODB_TOKEN` | Yes* | - | API Token auth (alternative) |
 | `IMPORT_FILE` | Yes | - | Path to export file |
 | `NOCODB_URL` | No | `http://localhost:8500` | NocoDB instance URL |
 | `NEW_BASE_TITLE` | No | `{original} (Import)` | New base title |

@@ -95,7 +95,7 @@ def get_auth_token(url: str, email: str, password: str) -> str:
         raise
 
 
-def get_config_with_auth(required_vars: list, optional_vars: dict = None) -> Dict:
+def get_config_with_auth(required_vars: list, optional_vars: dict | None = None) -> Dict:
     """
     Get configuration from environment variables with authentication support
 

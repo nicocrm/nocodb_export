@@ -19,7 +19,7 @@ from typing import Dict, List
 from nocodb_utils import ApiClient, get_config_with_auth
 
 
-def create_base(title: str, description: str, api_client: ApiClient, workspace_id: str = None) -> Dict:
+def create_base(title: str, description: str, api_client: ApiClient, workspace_id: str = "") -> Dict:
     """Create a new base"""
     print(f'\n📋 Creating new base: {title}')
 
@@ -140,7 +140,7 @@ def import_table_data(table_id: str, data: List[Dict], api_client: ApiClient) ->
 
 
 def import_full_base(import_file: str, api_client: ApiClient,
-                     new_base_title: str = None, workspace_id: str = None) -> Dict:
+                     new_base_title: str = "", workspace_id: str = "") -> Dict:
     """Import complete base from export file"""
     print('═══════════════════════════════════════════════')
     print('  NocoDB Full Base Import')

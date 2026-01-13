@@ -68,8 +68,8 @@ NOCODB_TOKEN="eyJhbGc..."
 
 ## What's Included
 
-✅ Base metadata, tables, schemas, columns, data, views
-⚠️ **NOT included:** Link/Relationship columns, Lookup/Rollup columns, Webhooks, API tokens
+✅ Base metadata, tables, schemas, columns, data
+⚠️ **NOT included:** Link/Relationship columns, Lookup/Rollup columns, Views, Webhooks, API tokens
 
 ## Use Cases
 

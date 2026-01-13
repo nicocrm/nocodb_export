@@ -9,42 +9,53 @@ Shared functions for NocoDB export/import scripts including:
 - Configuration management
 """
 
+from typing import Literal
 import dotenv
 import os
 import sys
 import requests
 from typing import Dict, Optional
 
+type TOKEN_TYPE = Literal["api", "auth"]
 
+class ApiClient:
+    def __init__(self, token: str, token_type: TOKEN_TYPE, url: str):
+        self.__token = token
+        self.__token_type = token_type
+        self.__url = url
 
-def make_request(url: str, method: str = 'GET', token: str = '',
-                 json_data: Optional[Dict] = None, params: Optional[Dict] = None) -> Dict:
-    """Make HTTP request to NocoDB API"""
-    headers = {
-        'xc-auth': token,
-        'Content-Type': 'application/json'
-    }
-
-    try:
-        if method == 'GET':
-            response = requests.get(url, headers=headers, params=params)
-        elif method == 'POST':
-            response = requests.post(url, headers=headers, json=json_data)
-        elif method == 'PUT':
-            response = requests.put(url, headers=headers, json=json_data)
-        elif method == 'PATCH':
-            response = requests.patch(url, headers=headers, json=json_data)
+    def make_request(self, method: str = 'GET', path: str = '',
+                    json_data: Optional[Dict] = None, params: Optional[Dict] = None) -> Dict:
+        """Make HTTP request to NocoDB API"""
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        if self.__token_type == "auth":
+            headers['xc-auth'] = self.__token
         else:
-            raise ValueError(f"Unsupported method: {method}")
+            headers['xc-token'] = self.__token
+        url = f"{self.__url}{path}"
 
-        response.raise_for_status()
-        return response.json() if response.content else {}
+        try:
+            if method == 'GET':
+                response = requests.get(url, headers=headers, params=params)
+            elif method == 'POST':
+                response = requests.post(url, headers=headers, json=json_data)
+            elif method == 'PUT':
+                response = requests.put(url, headers=headers, json=json_data)
+            elif method == 'PATCH':
+                response = requests.patch(url, headers=headers, json=json_data)
+            else:
+                raise ValueError(f"Unsupported method: {method}")
 
-    except requests.exceptions.RequestException as e:
-        print(f'   Error: {str(e)}')
-        if hasattr(e, 'response') and e.response is not None:
-            print(f'   Response: {e.response.text}')
-        raise
+            response.raise_for_status()
+            return response.json() if response.content else {}
+
+        except requests.exceptions.RequestException as e:
+            print(f'   Error: {str(e)}')
+            if hasattr(e, 'response') and e.response is not None:
+                print(f'   Response: {e.response.text}')
+            raise
 
 
 def get_auth_token(url: str, email: str, password: str) -> str:
@@ -84,7 +95,7 @@ def get_auth_token(url: str, email: str, password: str) -> str:
         raise
 
 
-def get_config_with_auth(required_vars: list, optional_vars: dict = None) -> Dict:
+def get_config_with_auth(required_vars: list, optional_vars: dict | None = None) -> Dict:
     """
     Get configuration from environment variables with authentication support
 
@@ -119,11 +130,13 @@ def get_config_with_auth(required_vars: list, optional_vars: dict = None) -> Dic
     if token:
         # Direct token provided
         config['token'] = token
+        config['token_type'] = "api"
     elif email and password:
         # Authenticate with email/password
         print('🔐 Authenticating with email/password...')
         try:
             config['token'] = get_auth_token(config['url'], email, password)
+            config['token_type'] = "auth"
             print('   ✓ Authentication successful')
         except Exception as e:
             print(f'❌ Failed to get authentication token: {str(e)}')

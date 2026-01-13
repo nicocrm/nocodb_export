@@ -7,7 +7,6 @@ This script imports a complete base from an export file including:
 - Base metadata
 - All tables with schemas
 - All data from each table
-- Views configuration
 """
 
 import os
@@ -19,81 +18,49 @@ from typing import Dict, List
 from nocodb_utils import ApiClient, get_config_with_auth
 
 
-def create_base(title: str, description: str, api_client: ApiClient, workspace_id: str = "") -> Dict:
+def create_base(
+    title: str, description: str, api_client: ApiClient, workspace_id: str = ''
+) -> Dict:
     """Create a new base"""
     print(f'\n📋 Creating new base: {title}')
 
-    base_data = {
-        'title': title,
-        'description': description or 'Imported base'
-    }
+    base_data = {'title': title, 'description': description or 'Imported base'}
 
     if workspace_id:
         base_data['fk_workspace_id'] = workspace_id
 
-    create_path = "/api/v2/meta/bases"
-    new_base = api_client.make_request(method='POST', path=create_path, json_data=base_data)
+    create_path = '/api/v2/meta/bases'
+    new_base = api_client.make_request(
+        method='POST', path=create_path, json_data=base_data
+    )
 
     print(f'   ✓ Base created with ID: {new_base["id"]}')
     return new_base
 
 
-def create_table(base_id: str, table_schema: Dict, api_client: ApiClient) -> Dict:
+def create_table(
+    base_id: str, source_id: str, table_schema: Dict, api_client: ApiClient
+) -> Dict:
     """Create a table with its schema"""
     table_title = table_schema.get('title', 'Untitled')
 
     # Prepare columns
-    columns = []
-    if 'columns' in table_schema:
-        for col in table_schema['columns']:
-            # Skip system columns
-            if col.get('system'):
-                continue
-
-            # Skip columns with null or empty column_name (usually relationship columns)
-            column_name = col.get('column_name')
-            if not column_name or column_name is None:
-                continue
-
-            # Skip relationship/link columns - they need to be created separately after all tables exist
-            uidt = col.get('uidt', 'SingleLineText')
-            if uidt in ['LinkToAnotherRecord', 'Links', 'Lookup', 'Rollup']:
-                continue
-
-            column_data = {
-                'title': col.get('title', column_name),
-                'column_name': str(column_name),
-                'uidt': uidt,
-            }
-
-            # Add column-specific properties (only if they're not None)
-            if col.get('dt') is not None:
-                column_data['dt'] = str(col['dt'])
-            if col.get('rqd') is not None:
-                column_data['rqd'] = col['rqd']
-            if col.get('cdf') is not None:
-                column_data['cdf'] = col['cdf']
-            if col.get('un') is not None:
-                column_data['un'] = col['un']
-            if col.get('pk') is not None:
-                column_data['pk'] = col['pk']
-            if col.get('ai') is not None:
-                column_data['ai'] = col['ai']
-            if col.get('dtxp') is not None:
-                column_data['dtxp'] = col['dtxp']
-            if col.get('dtxs') is not None:
-                column_data['dtxs'] = col['dtxs']
-
-            columns.append(column_data)
+    fields = [
+        f
+        for f in table_schema.get('fields', [])
+        if f.get('type') != 'ID' and not f.get('system')
+    ]
 
     table_data = {
         'title': table_title,
         'table_name': table_schema.get('table_name', table_title),
-        'columns': columns
+        'fields': fields,
     }
 
-    create_path = f"/api/v2/meta/bases/{base_id}/tables"
-    new_table = api_client.make_request(method='POST', path=create_path, json_data=table_data)
+    create_path = f'/api/v3/meta/bases/{base_id}/tables'
+    new_table = api_client.make_request(
+        method='POST', path=create_path, json_data=table_data
+    )
 
     return new_table
 
@@ -107,7 +74,7 @@ def import_table_data(table_id: str, data: List[Dict], api_client: ApiClient) ->
     batch_size = 100
 
     for i in range(0, len(data), batch_size):
-        batch = data[i:i + batch_size]
+        batch = data[i : i + batch_size]
 
         # Clean the data - remove system fields and null IDs
         cleaned_batch = []
@@ -115,19 +82,31 @@ def import_table_data(table_id: str, data: List[Dict], api_client: ApiClient) ->
             cleaned_record = {}
             for key, value in record.items():
                 # Skip system fields
-                if key in ['Id', 'CreatedAt', 'UpdatedAt', 'nc_', 'ncRecordId', 'ncRecordHash']:
+                if key in [
+                    'Id',
+                    'CreatedAt',
+                    'UpdatedAt',
+                    'nc_',
+                    'ncRecordId',
+                    'ncRecordHash',
+                ]:
                     continue
                 cleaned_record[key] = value
             cleaned_batch.append(cleaned_record)
 
         try:
-            data_path = f"/api/v2/tables/{table_id}/records"
+            data_path = f'/api/v2/tables/{table_id}/records'
             # Try to bulk insert
             for record in cleaned_batch:
                 try:
-                    api_client.make_request(method='POST', path=data_path, json_data=record)
+                    api_client.make_request(
+                        method='POST', path=data_path, json_data=record
+                    )
                     imported_count += 1
-                    print(f'      Imported {imported_count}/{len(data)} records...', end='\r')
+                    print(
+                        f'      Imported {imported_count}/{len(data)} records...',
+                        end='\r',
+                    )
                 except Exception as e:
                     print(f'\n      Warning: Failed to import record: {str(e)}')
                     continue
@@ -139,8 +118,12 @@ def import_table_data(table_id: str, data: List[Dict], api_client: ApiClient) ->
     return imported_count
 
 
-def import_full_base(import_file: str, api_client: ApiClient,
-                     new_base_title: str = "", workspace_id: str = "") -> Dict:
+def import_full_base(
+    import_file: str,
+    api_client: ApiClient,
+    new_base_title: str = '',
+    workspace_id: str = '',
+) -> Dict:
     """Import complete base from export file"""
     print('═══════════════════════════════════════════════')
     print('  NocoDB Full Base Import')
@@ -157,14 +140,13 @@ def import_full_base(import_file: str, api_client: ApiClient,
 
     # Step 1: Create new base
     original_title = export_data['base'].get('title', 'Imported Base')
-    base_title = new_base_title or f"{original_title} (Import)"
+    base_title = new_base_title or f'{original_title} (Import)'
 
     new_base = create_base(
-        base_title,
-        export_data['base'].get('description', ''),
-        api_client,
-        workspace_id
+        base_title, export_data['base'].get('description', ''), api_client, workspace_id
     )
+    new_base_id = new_base['id']
+    new_source_id = new_base['sources'][0]['id']
 
     # Wait a bit for base to be fully created
     time.sleep(2)
@@ -181,7 +163,9 @@ def import_full_base(import_file: str, api_client: ApiClient,
         print(f'      - Creating table structure...')
 
         try:
-            new_table = create_table(new_base['id'], table_schema, api_client)
+            new_table = create_table(
+                new_base_id, new_source_id, table_schema, api_client
+            )
             old_table_id = table_export['metadata']['id']
             table_mapping[old_table_id] = new_table['id']
 
@@ -203,7 +187,7 @@ def import_full_base(import_file: str, api_client: ApiClient,
     return {
         'base': new_base,
         'tables_created': len(table_mapping),
-        'table_mapping': table_mapping
+        'table_mapping': table_mapping,
     }
 
 
@@ -213,10 +197,7 @@ def main():
     # Get configuration with authentication support
     config = get_config_with_auth(
         required_vars=['IMPORT_FILE'],
-        optional_vars={
-            'NEW_BASE_TITLE': None,
-            'WORKSPACE_ID': None
-        }
+        optional_vars={'NEW_BASE_TITLE': None, 'WORKSPACE_ID': None},
     )
 
     if not os.path.exists(config['import_file']):
@@ -226,9 +207,7 @@ def main():
     try:
         # Create ApiClient instance
         api_client = ApiClient(
-            token=config['token'],
-            token_type=config['token_type'],
-            url=config['url']
+            token=config['token'], token_type=config['token_type'], url=config['url']
         )
 
         # Import the base
@@ -236,7 +215,7 @@ def main():
             config['import_file'],
             api_client,
             config['new_base_title'],
-            config['workspace_id']
+            config['workspace_id'],
         )
 
         print('\n═══════════════════════════════════════════════')
@@ -254,6 +233,7 @@ def main():
         print(f'\n❌ Import failed:')
         print(f'   {str(error)}')
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

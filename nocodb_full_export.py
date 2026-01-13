@@ -22,7 +22,7 @@ from nocodb_utils import ApiClient, get_config_with_auth
 def export_base_metadata(base_id: str, api_client: ApiClient) -> Dict:
     """Export base metadata"""
     print(f'\n📋 Exporting base metadata...')
-    base_path = f"/api/v2/meta/bases/{base_id}"
+    base_path = f"/api/v3/meta/bases/{base_id}"
     metadata = api_client.make_request(method='GET', path=base_path)
     print(f'   ✓ Base: {metadata.get("title", "Unknown")}')
     return metadata
@@ -31,16 +31,21 @@ def export_base_metadata(base_id: str, api_client: ApiClient) -> Dict:
 def export_tables(base_id: str, api_client: ApiClient) -> List[Dict]:
     """Export all tables in the base"""
     print(f'\n📊 Exporting tables...')
-    tables_path = f"/api/v2/meta/bases/{base_id}/tables"
+    tables_path = f"/api/v3/meta/bases/{base_id}/tables"
     tables_response = api_client.make_request(method='GET', path=tables_path)
     tables = tables_response.get('list', [])
     print(f'   ✓ Found {len(tables)} tables')
     return tables
 
 
-def export_table_schema(table_id: str, api_client: ApiClient) -> Dict:
-    """Export table schema (columns, relationships, etc.)"""
-    schema_path = f"/api/v2/meta/tables/{table_id}"
+def export_table_schema(base_id: str, table_id: str, api_client: ApiClient) -> Dict:
+    """
+    Export table schema (columns, relationships, etc.)
+
+    View names are part of the schema, but we don't do anything with them
+    since the API is not supported in the CE edition.
+    """
+    schema_path = f"/api/v3/meta/bases/{base_id}/tables/{table_id}"
     schema = api_client.make_request(method='GET', path=schema_path)
     return schema
 
@@ -82,16 +87,6 @@ def export_table_data(base_id: str, table_id: str, table_name: str, api_client: 
     return all_data
 
 
-def export_table_views(table_id: str, api_client: ApiClient) -> List[Dict]:
-    """Export views for a table"""
-    try:
-        views_path = f"/api/v2/meta/tables/{table_id}/views"
-        response = api_client.make_request(method='GET', path=views_path)
-        return response.get('list', [])
-    except Exception as e:
-        print(f'      Warning: Could not fetch views: {str(e)}')
-        return []
-
 
 def export_full_base(base_id: str, api_client: ApiClient, include_data: bool = True) -> Dict:
     """Export complete base with all tables, schemas, and data"""
@@ -100,7 +95,7 @@ def export_full_base(base_id: str, api_client: ApiClient, include_data: bool = T
     print('═══════════════════════════════════════════════')
 
     export_data = {
-        'export_version': '1.0',
+        'export_version': '2.0',
         'export_date': datetime.now().isoformat(),
         'base': {},
         'tables': []
@@ -122,11 +117,7 @@ def export_full_base(base_id: str, api_client: ApiClient, include_data: bool = T
 
         # Export schema
         print(f'      - Fetching schema...')
-        schema = export_table_schema(table_id, api_client)
-
-        # Export views
-        print(f'      - Fetching views...')
-        views = export_table_views(table_id, api_client)
+        schema = export_table_schema(base_id, table_id, api_client)
 
         # Export data
         data = []
@@ -140,7 +131,6 @@ def export_full_base(base_id: str, api_client: ApiClient, include_data: bool = T
         export_data['tables'].append({
             'metadata': table,
             'schema': schema,
-            'views': views,
             'data': data,
             'record_count': len(data)
         })

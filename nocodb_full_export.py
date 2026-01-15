@@ -10,6 +10,8 @@ This script exports a complete base including:
 - Views configuration
 """
 
+from dataclasses import asdict
+from dataclasses import dataclass
 import os
 import sys
 import json
@@ -86,23 +88,32 @@ def export_table_data(base_id: str, table_id: str, table_name: str, api_client: 
 
     return all_data
 
+@dataclass
+class ExportData:
+    export_version: str
+    export_date: str
+    base: dict
+    tables: list[dict]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
 
 
-def export_full_base(base_id: str, api_client: ApiClient, include_data: bool = True) -> Dict:
+def export_full_base(base_id: str, api_client: ApiClient, include_data: bool = True) -> ExportData:
     """Export complete base with all tables, schemas, and data"""
     print('═══════════════════════════════════════════════')
     print('  NocoDB Full Base Export')
     print('═══════════════════════════════════════════════')
 
-    export_data = {
-        'export_version': '2.0',
-        'export_date': datetime.now().isoformat(),
-        'base': {},
-        'tables': []
-    }
+    export_data = ExportData(
+        export_version='2.0',
+        export_date=datetime.now().isoformat(),
+        base={},
+        tables=[]
+    )
 
     # Step 1: Export base metadata
-    export_data['base'] = export_base_metadata(base_id, api_client)
+    export_data.base = export_base_metadata(base_id, api_client)
 
     # Step 2: Export all tables
     tables = export_tables(base_id, api_client)
@@ -128,7 +139,7 @@ def export_full_base(base_id: str, api_client: ApiClient, include_data: bool = T
         else:
             print(f'      - Skipping data (schema only)')
 
-        export_data['tables'].append({
+        export_data.tables.append({
             'metadata': table,
             'schema': schema,
             'data': data,
@@ -173,19 +184,19 @@ def main():
             output_file = config['output_file']
         else:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            base_title = export_data['base'].get('title', 'base').replace(' ', '_')
+            base_title = export_data.base.get('title', 'base').replace(' ', '_')
             output_file = f"nocodb_export_{base_title}_{timestamp}.json"
 
         with open(output_file, 'w') as f:
-            json.dump(export_data, f, indent=2)
+            json.dump(export_data.to_dict(), f, indent=2)
 
         print('\n═══════════════════════════════════════════════')
         print('  Export Summary')
         print('═══════════════════════════════════════════════')
-        print(f'Base: {export_data["base"].get("title", "Unknown")}')
-        print(f'Tables: {len(export_data["tables"])}')
+        print(f'Base: {export_data.base.get("title", "Unknown")}')
+        print(f'Tables: {len(export_data.tables)}')
 
-        total_records = sum(t['record_count'] for t in export_data['tables'])
+        total_records = sum(t['record_count'] for t in export_data.tables)
         print(f'Total Records: {total_records}')
         print(f'\n💾 Export saved to: {output_file}')
         print(f'   File size: {os.path.getsize(output_file) / (1024*1024):.2f} MB')

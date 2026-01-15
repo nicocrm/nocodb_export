@@ -11,3 +11,8 @@ dependencies = [
 
 [tool.ruff.format]
 quote-style = "single"
+
+[dependency-groups]
+dev = [
+    "ty>=0.0.12",
+]

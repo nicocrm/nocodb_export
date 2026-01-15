@@ -9,6 +9,7 @@ This script imports a complete base from an export file including:
 - All data from each table
 """
 
+import re
 from typing import Any
 import os
 import sys
@@ -38,6 +39,26 @@ def create_base(
     print(f'   ✓ Base created with ID: {new_base["id"]}')
     return new_base
 
+def clean_color(choice: dict) -> dict:
+    """Fixes some incompatibilities in the exported color format"""
+    if color := choice.get('color'):
+        if re.match(r'^#[0-9A-Fa-f]{3}$', color):
+            # 3 digit -> 6 digit hex color
+            choice['color'] = f'#{color[1]}{color[1]}{color[2]}{color[2]}{color[3]}{color[3]}'
+    return choice
+
+def clean_field_options(field: Dict) -> Dict:
+    """Fixes some incompatibilities in the field options that can make it impossible to import"""
+    if not field.get('options'):
+        return field
+    if field.get('type') in ('Email', 'PhoneNumber', 'URL'):
+        field['options']['validation'] = field['options'].pop('validate', False)
+    field['options'] = clean_color(field['options'])
+    if choices := field['options'].get('choices'):
+        field['options']['choices'] = [clean_color(c) for c in choices]
+    for invalid_option in ('locale_string', 'notify'):
+        field['options'].pop(invalid_option, None)
+    return field
 
 def create_table(
     base_id: str, source_id: str, table_schema: Dict, api_client: ApiClient
@@ -52,6 +73,8 @@ def create_table(
         'Lookup',
         'ForeignKey',
         'LinkToAnotherRecord',
+        'CreatedTime',
+        'LastModifiedTime',
     }
     fields = [
         f
@@ -62,7 +85,7 @@ def create_table(
     table_data = {
         'title': table_title,
         'table_name': table_schema.get('table_name', table_title),
-        'fields': fields,
+        'fields': [clean_field_options(field) for field in fields],
     }
 
     create_path = f'/api/v3/meta/bases/{base_id}/tables'
@@ -100,6 +123,7 @@ def import_table_data(
                     'Id',
                     'CreatedAt',
                     'UpdatedAt',
+                    'Last modified by',
                     'nc_',
                     'ncRecordId',
                     'ncRecordHash',
@@ -184,11 +208,37 @@ def create_relationship_fields(
             print(f'      ✓ Relationship field created: {field_data["title"]}')
     return created_fields
 
+def find_old_link_field(link_field: dict, table_schema: dict, table_mapping: dict[str, str]) -> dict | None:
+    """
+    Find the link field in the OLD table schema using the (old) related table id
+
+    link_field is the link field from the NEW schema
+    table_schema is the OLD table schema
+    table_mapping is a dictionary of:
+        old_table_id -> new_table_id
+    """
+    new_table_id = link_field.get('options', {}).get('related_table_id')
+    old_table_id = next(
+        (k for k, v in table_mapping.items() if v == new_table_id), None
+    )
+    if not old_table_id:
+        return None
+    by_title = {f['title']: f for f in table_schema.get('fields', []) if f.get('options', {}).get('related_table_id') == old_table_id}
+    by_title_without_space = {k.replace(' ', ''): v for k, v in by_title.items()}
+    if len(by_title) == 1:
+        return next(iter(by_title.values()))
+    if f := by_title.get(link_field['title']):
+        return f
+    if f := by_title_without_space.get(link_field['title'].replace(' ', '')):
+        return f
+    return None
 
 def import_relationship_data(
     base_id: str,
     table_id: str,
+    old_table_schema: dict,
     table_data: list[dict[str, Any]],
+    table_mapping: dict[str, str],
     data_mapping: dict[str, dict[int, int]],
     api_client: ApiClient,
 ) -> int:
@@ -198,13 +248,16 @@ def import_relationship_data(
     data_mapping is a dictionary of:
         new_table_id -> {old_record_id -> new_record_id}
     table_id is the NEW table id
+    old_table_schema is the OLD table schema
+    table_mapping is a dictionary of:
+        old_table_id -> new_table_id
     """
-    table_schema = api_client.make_request(
+    new_table_schema = api_client.make_request(
         method='GET', path=f'/api/v3/meta/bases/{base_id}/tables/{table_id}'
     )
     link_fields = [
         field
-        for field in table_schema.get('fields', [])
+        for field in new_table_schema.get('fields', [])
         if field.get('type') == 'LinkToAnotherRecord'
         and field.get('options', {}).get('related_table_id') in data_mapping
     ]
@@ -212,18 +265,25 @@ def import_relationship_data(
     linked_count = 0
     for link_field in link_fields:
         linked_table_id = link_field.get('options', {}).get('related_table_id')
-        linked_table_data = data_mapping.get(linked_table_id)
-        assert linked_table_data is not None
+        linked_table_id_mapping = data_mapping.get(linked_table_id)
+        old_link_field = find_old_link_field(link_field, old_table_schema, table_mapping)
+        if not old_link_field:
+            print(f'      ✗ Link field not found: {link_field["title"]}')
+            continue
+        assert linked_table_id_mapping is not None
         for record in table_data:
-            linked_record = record[link_field['title']]
+            linked_record = record.get(old_link_field['title'])
             if not linked_record:
                 continue
             linked_record_id = linked_record['Id']
-            new_linked_record_id = linked_table_data.get(linked_record_id)
+            new_linked_record_id = linked_table_id_mapping.get(linked_record_id)
             if not new_linked_record_id:
                 print(f'      ✗ Linked record not found: {linked_record_id}')
                 continue
-            record_to_link = table_record_mapping.get(linked_record_id)
+            record_to_link = table_record_mapping.get(record['Id'])
+            if not record_to_link:
+                print(f'      ✗ Record to link not found: {record["Id"]}')
+                continue
             api_client.make_request(
                 method='POST',
                 path=f'/api/v3/data/{base_id}/{table_id}/links/{link_field["id"]}/{record_to_link}',
@@ -289,27 +349,7 @@ def import_full_base(
             print(f'      ❌ Failed to create table: {str(e)}')
             sys.exit(1)
 
-    # Step 3: Import data
-    print(f'\n📊 Importing data...')
-    data_mapping: dict[str, dict[int, int]] = {}
-    for i, table_export in enumerate(export_data.get('tables', []), 1):
-        data = table_export.get('data', [])
-        new_table_id = table_mapping[table_export['metadata']['id']]
-        print(
-            f'\n   [{i}/{len(export_data["tables"])}] {table_export["metadata"]["title"]}'
-        )
-        if not new_table_id:
-            print(f'      ✗ Table not found: {table_export["metadata"]["id"]}')
-            continue
-        if data:
-            print(f'      - Importing {len(data)} records...')
-            imported = import_table_data(new_table_id, data, api_client)
-            data_mapping[new_table_id] = imported
-            print(f'      ✓ Imported {len(imported)} records')
-        else:
-            print(f'      - No data to import')
-
-    # Step 4: Create relationship fields
+    # Step 3: Create relationship fields
     print(f'\n📊 Creating relationship fields...')
     for i, table_export in enumerate(export_data.get('tables', []), 1):
         table_schema = table_export.get('schema', {})
@@ -328,6 +368,27 @@ def import_full_base(
             print(f'      ❌ Failed to create relationship fields: {str(e)}')
             sys.exit(1)
 
+    # Step 4: Import data
+    print(f'\n📊 Importing data...')
+    data_mapping: dict[str, dict[int, int]] = {}
+    for i, table_export in enumerate(export_data.get('tables', []), 1):
+        data = table_export.get('data', [])
+        new_table_id = table_mapping[table_export['metadata']['id']]
+        print(
+            f'\n   [{i}/{len(export_data["tables"])}] {table_export["metadata"]["title"]}'
+        )
+        if not new_table_id:
+            print(f'      ✗ Table not found: {table_export["metadata"]["id"]}')
+            continue
+        if data:
+            print(f'      - Importing {len(data)} records...')
+            imported = import_table_data(new_table_id, data, api_client)
+            data_mapping[new_table_id] = imported
+            print(f'      ✓ Imported {len(imported)} records')
+        else:
+            print(f'      - No data to import')
+            data_mapping[new_table_id] = {}
+
     # Step 5: Import relationship data
     print(f'\n📊 Importing relationship data...')
     for i, table_export in enumerate(export_data.get('tables', []), 1):
@@ -343,7 +404,7 @@ def import_full_base(
             print(f'      - No data to import')
             continue
         linked_count = import_relationship_data(
-            new_base_id, new_table_id, data, data_mapping, api_client
+            new_base_id, new_table_id, table_export.get('schema', {}), data, table_mapping, data_mapping, api_client
         )
         print(f'      ✓ Linked {linked_count} records')
 
